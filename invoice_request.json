@@ -1,0 +1,8 @@
+{
+  "action": "create_and_post_customer_invoice",
+  "erp": "tryton",
+  "party": "Angela Martin",
+  "lines": [
+    { "product": "A4 Paper 500", "quantity": 1, "unit_price": 50 }
+  ]
+}

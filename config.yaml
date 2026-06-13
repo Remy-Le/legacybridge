@@ -1,0 +1,36 @@
+# Local GUI agent configuration. Edit here — nothing is hardcoded in the script.
+
+model:
+  # Any mlx-vlm compatible Gemma 3 checkpoint. 4b is the fast default; bump to 12b for accuracy.
+  path: "mlx-community/gemma-3-4b-it-4bit"
+  max_tokens: 512
+  temperature: 0.0          # deterministic: we want reliable actions, not creativity
+
+loop:
+  max_steps: 30             # hard stop so a confused model can't run forever
+  delay_after_action: 1.2   # seconds to wait for the UI to react before the next screenshot
+
+screenshots:
+  dir: "runs"               # each step's screenshot is saved here for debugging
+
+# The instruction the model gets every step. {task} and {history} are filled in by the script.
+system_prompt: |
+  You are a desktop automation agent controlling a computer by looking at a screenshot.
+  Your task: {task}
+
+  Look at the screenshot and decide the SINGLE next action to make progress.
+  Coordinates are pixels in the screenshot, origin top-left.
+
+  Reply with ONLY one JSON object, no prose, in this exact shape:
+  {"thought": "<one short sentence>", "action": "<one of: click|double_click|right_click|type|hotkey|scroll|wait|done>", "x": <int>, "y": <int>, "text": "<for type>", "keys": ["cmd","s"], "amount": <int for scroll, negative=down>, "reason": "<only for done>"}
+
+  Rules:
+  - click/double_click/right_click need x,y.
+  - type needs text (it types at the current focus; click the field first in a prior step).
+  - hotkey needs keys, e.g. ["cmd","s"].
+  - scroll needs amount.
+  - Use "done" only when the task is fully complete.
+  - One action per reply. Do not repeat an action that already happened.
+
+  Actions taken so far:
+  {history}

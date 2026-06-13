@@ -46,8 +46,12 @@ The model is **`mlx-community/Qwen3.5-35B-A3B-4bit`** — a 4-bit MLX port of Qw
 # Use this to validate coordinates before trusting a real run.
 .venv/bin/python agent.py "<task>" --config config.yaml --once
 
-# REAL RUN — executes the action loop (drives the mouse/keyboard).
+# REAL RUN, model-driven — the model decides every action in a screenshot loop.
 .venv/bin/python agent.py "open customer invoices" --config config.yaml
+
+# REAL RUN, deterministic workflow — the SHIPPED path. A fixed YAML step list;
+# the model is asked ONLY to locate described targets, never to plan. See WORKFLOW.md.
+.venv/bin/python agent.py --workflow workflows/invoice_angela.yaml --config config.yaml
 ```
 
 - The agent **auto-brings Tryton to the front** (osascript) — no manual focus needed.
@@ -57,12 +61,15 @@ The model is **`mlx-community/Qwen3.5-35B-A3B-4bit`** — a 4-bit MLX port of Qw
 
 ## How it works
 
-`agent.py` loops: screenshot → backend returns one action → execute via pyautogui → wait → repeat, until the model replies `done` or `max_steps` is hit.
+Two execution modes share one harness (full architecture in **`WORKFLOW.md`**):
+
+- **Model-driven loop** (`agent.py "<task>"`): screenshot → backend returns one action → execute via pyautogui → wait → repeat, until the model replies `done` or `max_steps` is hit. The model is the planner. Brittle past a few steps — it can't reliably self-sequence a long flow (it loops/repeats).
+- **Deterministic workflow runner** (`--workflow <file>.yaml`): the **shipped** path. A fixed, ordered step list the harness executes one step per iteration, never re-judging progress. Keyboard steps run with no model call; click steps ask the backend only *where* a described target is. This is how the end-to-end Tryton invoice demo runs reliably — see `WORKFLOW.md`.
 
 - **`agent.py`** — the loop, screenshotting, `execute()`, trace logging, app focus. Model-agnostic.
 - **`backends/<name>.py`** — the model, selected by `backend:` in config. A backend exposes
-  `load(settings)` and `predict(handle, task, history, image_path, screen, settings)` returning an
-  action dict in **logical screen coordinates**, and owns its own prompt / parsing / coordinate conversion.
+  `load(settings)`, `predict(...)` (model-driven mode), and `locate(...)` (workflow mode) — all
+  returning **logical screen coordinates**, and owns its own prompt / parsing / coordinate conversion.
   - `backends/qwen.py` — **active**. Any JSON-emitting mlx-vlm model (Qwen3.5, Gemma).
   - `archive/uitars/` — a parked UI-TARS backend; see `archive/uitars/WHY_WE_DROPPED_UITARS.md`.
 - **`config.yaml`** — all settings (model path, prompt, loop limits, coord space). Nothing hardcoded in Python.
@@ -71,12 +78,14 @@ The model is **`mlx-community/Qwen3.5-35B-A3B-4bit`** — a 4-bit MLX port of Qw
 
 - **Single primary display.** pyautogui only sees and clicks the **built-in display** — Tryton must run there during a real run.
 - **Speed.** Qwen3.5 is ~32 s per inference; a multi-step workflow is slow by design.
-- **Coordinate space.** Qwen3.5 emits *logical* screen coords (`coord_space: logical`), which map 1:1 to pyautogui clicks — no scaling. Calibrate any new model with `--once` + a crop check (open `runs/once.png`, crop around the returned (x,y)×2 in screenshot px, confirm it's on target). Other coord spaces (`image`, `normalized`) are supported in `backends/qwen.py`.
+- **Coordinate space.** Qwen3.5 emits coordinates *normalized* to 0..1000 over the image (`coord_space: normalized`); `backends/qwen.py` scales them to logical screen points before clicking. Treating them as `logical` made every narrow target miss by ~0.66x (full story in `WORKFLOW.md` §4.1). Calibrate any new model with `--once` + a crop check (open `runs/once.png`, crop around the returned (x,y)×2 in screenshot px, confirm it's on target). Other coord spaces (`logical`, `image`) are supported in `backends/qwen.py`.
 - **Model format quirks.** Qwen sometimes returns coords as strings (`"101"`), floats, or a packed array (`x:[x,y]`). `backends/qwen.py` normalizes these — harden the parser there, not in `agent.py`.
 - **Grid overlay** (`grid:` in config) exists but is **off** — it hurt more than helped on dense menus.
 - **Done-detection.** The prompt tells the model to read the breadcrumb / active tab title and emit `done` when the target view is already open. It occasionally does one redundant click before recognizing completion.
 
-## Known weak spots on multi-step workflows
+## Known weak spots of the model-driven loop
+
+These are why the deterministic `--workflow` runner exists — it sidesteps all of them by owning the sequence itself and using the model only to locate targets.
 
 - Redundant repeated clicks before `done`.
 - Multi-step state tracking across `history` (a list of past action summaries).

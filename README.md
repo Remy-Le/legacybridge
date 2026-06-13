@@ -11,4 +11,10 @@ Drive the Tryton desktop GUI the way a human would, but with a local model in th
 3. **Act locally** — click / type / keypress to perform the step.
 4. Repeat until the task is done.
 
-Everything runs locally: no cloud, no API for the vision/decision step.
+## Why local
+
+The whole loop runs on-device — model, screenshots, and control. **No screen data ever leaves the machine.** That makes it fully independent of any cloud and safe for sensitive enterprise systems.
+
+## Beyond Tryton
+
+OS-level control (e.g. `pyautogui`) means the agent isn't tied to Tryton's API — it drives whatever is on screen. Tryton is the demo target; the same approach works on **SAP** and other legacy GUIs where data must stay in-house.

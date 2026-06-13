@@ -1,12 +1,13 @@
 # Local GUI agent configuration. Edit here — nothing is hardcoded in the script.
 
 model:
-  # Any mlx-vlm compatible Gemma 3 checkpoint. 4b is the fast default; bump to 12b for accuracy.
-  path: "mlx-community/gemma-3-4b-it-4bit"
+  # Local Gemma 4 12B 8-bit, already downloaded. Any mlx-vlm path/HF id works.
+  path: "/Users/peter/models/mlx/gemma-4-12B-it-8bit"
   max_tokens: 512
   temperature: 0.0          # deterministic: we want reliable actions, not creativity
 
 loop:
+  start_delay: 5            # seconds before the first screenshot — bring the target window (Tryton) to front
   max_steps: 30             # hard stop so a confused model can't run forever
   delay_after_action: 1.2   # seconds to wait for the UI to react before the next screenshot
 

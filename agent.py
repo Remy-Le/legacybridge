@@ -99,6 +99,11 @@ def main():
     model, processor = load(settings["model"]["path"])
     mlx_config = load_config(settings["model"]["path"])
 
+    start_delay = settings["loop"].get("start_delay", 0)
+    if start_delay:
+        print(f"Bring the target window to front — starting in {start_delay}s ...", file=sys.stderr)
+        time.sleep(start_delay)
+
     history = []
     for step in range(1, settings["loop"]["max_steps"] + 1):
         shot_path = os.path.join(settings["screenshots"]["dir"], f"step_{step:02d}.png")

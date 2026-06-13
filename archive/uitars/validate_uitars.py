@@ -29,7 +29,7 @@ import time
 import pyautogui
 import yaml
 
-from backends import uitars
+import uitars  # archived: validator and backend now sit side-by-side in archive/uitars/
 
 # Sane defaults so this works even before config.yaml has the uitars section
 # merged by the other session. Real runs pick up config.yaml if it has one.

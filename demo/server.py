@@ -62,10 +62,13 @@ _fake_done = False     # set True by the fake-run thread when it finishes
 #            candidates[0].content.parts[0].text.  Model: gemini-flash-latest.
 #   Tavily:  POST https://api.tavily.com/search, Bearer auth, body {"query":...,
 #            "include_answer":true}, summary in response["answer"].
-# Best-guess (NOT fully verified — Fastino docs cert expired / endpoint not public):
-#   Pioneer/Fastino: POST https://api.fastino.ai/v1/extract with model_id + input[].
-#   Because an entity-extraction model does not naturally emit our invoice contract,
-#   /structure relies on the local fallback by design — that is the reliable path.
+# Verified base (api.pioneer.ai, X-API-Key, OpenAI-compatible at /v1):
+#   Pioneer: POST https://api.pioneer.ai/v1/chat/completions with X-API-Key, asking
+#   the model to emit the invoice JSON. NOTE: Pioneer returns 403
+#   `card_verification_required` until you subscribe to a Hobby/Pro plan and verify a
+#   card at https://agent.pioneer.ai/billing — until then /structure uses the local
+#   fallback (which builds the exact contract anyway, so the demo never breaks).
+#   Model id is configurable via PIONEER_MODEL.
 
 def _gemini(message):
     key = os.environ["GEMINI_API_KEY"]  # KeyError -> caught by caller
@@ -103,14 +106,18 @@ def _tavily(product):
 
 
 def _pioneer(party, product, quantity, unit_price):
-    """Best-guess Fastino call. On any failure the caller builds the invoice locally."""
+    """Pioneer (Fastino) call via its OpenAI-compatible endpoint. Returns 403 until a
+    card is verified (see comment above); on any failure the caller builds locally."""
     key = os.environ["PIONEER_API_KEY"]
+    model = os.environ.get("PIONEER_MODEL", "fastino/gliner2-base-v1")
     r = requests.post(
-        "https://api.fastino.ai/v1/extract",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"model_id": "fastino-data-structuring",
-              "input": [{"text": f"Invoice {party} for {quantity}x {product} at {unit_price} each.",
-                         "parameters": {"entity_types": ["party", "product", "quantity", "unit_price"]}}]},
+        "https://api.pioneer.ai/v1/chat/completions",
+        headers={"X-API-Key": key, "Content-Type": "application/json"},
+        json={"model": model,
+              "messages": [{"role": "user", "content": (
+                  "Extract this invoice as JSON with keys party, product, quantity, "
+                  f"unit_price. Text: Invoice {party} for {quantity}x {product} "
+                  f"at {unit_price} each.")}]},
         timeout=8,
     )
     r.raise_for_status()

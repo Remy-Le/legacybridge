@@ -1,6 +1,6 @@
 # WORKFLOW.md — Driving Tryton end-to-end with a local vision model
 
-How the `munich-old-gui` agent creates and posts a complete customer invoice in
+How the `legacybridge` agent creates and posts a complete customer invoice in
 the **Tryton** ERP, fully on-device, by looking at the screen and acting like a
 human would. This is the deep-dive companion to `README.md`: it documents the
 *deterministic workflow runner*, the `invoice_angela.yaml` flow step by step, and
@@ -257,7 +257,7 @@ All model-quirk handling lives in the backend — harden it there.
 
 ## 5. How to run
 
-From `~/Documents/Curavani/Hackathons/munich-old-gui`:
+From `~/Documents/Curavani/Hackathons/legacybridge`:
 
 ```bash
 # REAL RUN — the deterministic 17-step invoice workflow (drives mouse/keyboard).

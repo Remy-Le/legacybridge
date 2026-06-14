@@ -1,4 +1,4 @@
-# Munich old GUI
+# LegacyBridge
 
 A local GUI agent that controls **Tryton** (an old ERP system) end-to-end, fully on-device.
 
@@ -24,7 +24,7 @@ OS-level control (`pyautogui`) means the agent isn't tied to Tryton's API — it
 Apple Silicon Mac required (the model runs via MLX). Developed on an M3 Pro, 36 GB.
 
 ```bash
-cd ~/Documents/Curavani/Hackathons/munich-old-gui
+cd ~/Documents/Curavani/Hackathons/legacybridge
 
 # 1. Python env (3.13, pinned in .python-version)
 python -m venv .venv

@@ -8,8 +8,8 @@ exclude:
     # Generated Claude Design preview runtime — "GENERATED ... do not edit".
     # eval/new Function are core to the live preview (RCE + document.write + SSRF findings).
     - presentation/
-    # Static demo page (document.write finding).
-    - demo/app.html
+    # Static demo app (document.write/innerHTML XSS findings) + demo server.
+    - demo/
     # Local on-device GUI agent; dynamic backend import by design (file-inclusion finding).
     - agent.py
     # Local-only deps; pulls transitive `tokenizers` (its XSS CVE is irrelevant on-device).

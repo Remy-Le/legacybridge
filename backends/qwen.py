@@ -27,7 +27,7 @@ def load(settings):
     return {"model": model, "processor": processor, "mlx_config": load_config(path)}
 
 
-def predict(handle, task, history, image_path, screen, settings):
+def predict(handle, task, history, image_path, region, settings):
     # Plain .replace, not .format: the prompt embeds a literal JSON example whose
     # braces would otherwise be parsed as format fields.
     prompt = (
@@ -50,12 +50,12 @@ def predict(handle, task, history, image_path, screen, settings):
 
     action = _parse(raw)
     _normalize_point(action)
-    _to_logical(action, image_path, screen, settings["model"].get("coord_space", "logical"))
+    _to_logical(action, image_path, region, settings["model"].get("coord_space", "logical"))
     action["raw"] = raw
     return action
 
 
-def locate(handle, target, image_path, screen, settings):
+def locate(handle, target, image_path, region, settings):
     """Deterministic-runner helper: ask the model ONLY where a described target
     is, and return (x, y, raw) in LOGICAL screen coordinates. The harness owns
     the step sequence — the model never decides what to do, only where to click."""
@@ -81,7 +81,7 @@ def locate(handle, target, image_path, screen, settings):
             raise
         action = {"x": int(nums[0]), "y": int(nums[1])}
     _normalize_point(action)
-    _to_logical(action, image_path, screen, settings["model"].get("coord_space", "logical"))
+    _to_logical(action, image_path, region, settings["model"].get("coord_space", "logical"))
     return action["x"], action["y"], raw
 
 
@@ -142,18 +142,24 @@ def _to_int(v):
     return int(m.group(0))
 
 
-def _to_logical(action, image_path, screen, space):
+def _to_logical(action, image_path, region, space):
+    """Map the model's reported coordinates into LOGICAL screen points.
+
+    `region` = (x, y, w, h) is the logical rectangle the input image covers:
+    full screen (0, 0, W, H) normally, or the Tryton window rect when the agent
+    crops its screenshot to one window. The model's coords are relative to the
+    (possibly cropped) image, so we scale by the region size and add its offset."""
     if "x" not in action or "y" not in action:
         return
+    rx, ry, rw, rh = region
     if space == "logical":
-        return
-    logical_w, logical_h = screen
+        return  # already absolute logical points (full-screen capture only)
     if space == "image":
         img_w, img_h = Image.open(image_path).size
-        action["x"] = round(action["x"] / img_w * logical_w)
-        action["y"] = round(action["y"] / img_h * logical_h)
+        action["x"] = rx + round(action["x"] / img_w * rw)
+        action["y"] = ry + round(action["y"] / img_h * rh)
     elif space == "normalized":
-        action["x"] = round(action["x"] / 1000 * logical_w)
-        action["y"] = round(action["y"] / 1000 * logical_h)
+        action["x"] = rx + round(action["x"] / 1000 * rw)
+        action["y"] = ry + round(action["y"] / 1000 * rh)
     else:
         raise ValueError(f"Unknown coord_space: {space}")

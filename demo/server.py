@@ -17,7 +17,6 @@ Run:
 import json
 import os
 import re
-import subprocess
 import sys
 import threading
 import time
@@ -48,12 +47,41 @@ def _load_env():
 
 _load_env()
 
+# Run the agent in-process so the model stays warm. Work from the repo root and
+# put it on the path so `import agent` and `backends.qwen` resolve.
+os.chdir(REPO_ROOT)
+sys.path.insert(0, REPO_ROOT)
+
 app = Flask(__name__)
 
-# Background agent subprocess (or fake-run thread) lives here.
-_proc = None          # subprocess.Popen handle for the real agent
+FAKE = os.environ.get("FAKE_RUN") == "1"
+
+# --- Warm LegacyBridge agent (loaded ONCE at startup in real mode) -----------
+# The 19GB Qwen model is loaded a single time and kept resident, so every
+# "Push to ERP" reuses it with no reload. FAKE_RUN skips this entirely.
+_agent = None          # the agent module
+_settings = None       # parsed config.yaml
+_backend = None        # the model backend module
+_handle = None         # the loaded model handle (the warm part)
+
+# Run state for /status.
 _started = False       # has /push ever been called this session?
+_run_thread = None     # the in-process workflow thread (real mode)
+_run_error = None      # exception string if the workflow crashed
 _fake_done = False     # set True by the fake-run thread when it finishes
+
+
+def _warm_up():
+    """Load config + model once, up front, so the first run is instant."""
+    global _agent, _settings, _backend, _handle
+    import agent
+    _agent = agent
+    _settings = agent.load_settings("config.yaml")
+    os.makedirs(_settings["screenshots"]["dir"], exist_ok=True)
+    _backend = agent.load_backend(_settings)
+    print(f"Loading model '{_settings['model']['path']}' (warm, one-time) ...", file=sys.stderr)
+    _handle = _backend.load(_settings)
+    print("Model warm. LegacyBridge ready.", file=sys.stderr)
 
 
 # --- Partner integrations ----------------------------------------------------
@@ -193,26 +221,34 @@ def _fake_run():
     _fake_done = True
 
 
+def _real_run():
+    """Drive Tryton with the warm model. Runs in a daemon thread so /push returns
+    immediately; /status watches the trace + this thread."""
+    global _run_error
+    try:
+        _agent.run_workflow(_backend, _handle, _settings,
+                            "workflows/invoice_template.yaml",
+                            input_path="invoice_request.json")
+    except Exception as e:
+        _run_error = f"{type(e).__name__}: {e}"
+        print(f"[run error] {_run_error}", file=sys.stderr)
+
+
 @app.route("/push", methods=["POST"])
 def push():
-    global _proc, _started, _fake_done
+    global _started, _fake_done, _run_thread, _run_error
     invoice = request.json
     with open(INVOICE_PATH, "w") as f:
         json.dump(invoice, f, indent=2)
 
     _started = True
-    if os.environ.get("FAKE_RUN") == "1":
+    if FAKE:
         _fake_done = False
-        _proc = None
         threading.Thread(target=_fake_run, daemon=True).start()
     else:
-        _proc = subprocess.Popen(
-            [sys.executable or "python", "agent.py",
-             "--workflow", "workflows/invoice_template.yaml",
-             "--input", "invoice_request.json",
-             "--config", "config.yaml"],
-            cwd=REPO_ROOT,
-        )
+        _run_error = None
+        _run_thread = threading.Thread(target=_real_run, daemon=True)
+        _run_thread.start()
     return jsonify({"status": "started"})
 
 
@@ -237,28 +273,29 @@ def status():
 
     step, total = _last_step()
 
-    # Fake-run mode: no subprocess; the thread sets _fake_done.
-    if os.environ.get("FAKE_RUN") == "1":
+    # Fake-run mode: no model; the thread sets _fake_done.
+    if FAKE:
         done = _fake_done
-        running = not done
-        return jsonify({"running": running, "step": step, "total": total, "done": done,
+        return jsonify({"running": not done, "step": step, "total": total, "done": done,
                         "error": False, "invoice_id": "INV-0042" if done else None,
                         "message": "Workflow complete." if done else f"Step {step}/{total}"})
 
-    code = _proc.poll() if _proc else None
-    if code is None:
+    # Real mode: the in-process workflow thread drives Tryton with the warm model.
+    if _run_thread and _run_thread.is_alive():
         return jsonify({"running": True, "step": step, "total": total, "done": False,
                         "error": False, "invoice_id": None, "message": f"Step {step}/{total}"})
-    if code == 0:
-        return jsonify({"running": False, "step": step, "total": total, "done": True,
-                        "error": False, "invoice_id": "INV-0042", "message": "Workflow complete."})
-    return jsonify({"running": False, "step": step, "total": total, "done": False,
-                    "error": True, "invoice_id": None, "message": f"Agent exited with code {code}."})
+    if _run_error:
+        return jsonify({"running": False, "step": step, "total": total, "done": False,
+                        "error": True, "invoice_id": None, "message": _run_error})
+    return jsonify({"running": False, "step": step, "total": total, "done": True,
+                    "error": False, "invoice_id": "INV-0042", "message": "Workflow complete."})
 
 
 if __name__ == "__main__":
     # Default 5050, not 5000: macOS hands port 5000 to the AirPlay Receiver,
     # which silently returns 403 and hijacks the demo. Override with PORT=.
     port = int(os.environ.get("PORT", "5050"))
-    print(f"Billflow demo on http://localhost:{port}  (FAKE_RUN={os.environ.get('FAKE_RUN', '0')})")
+    if not FAKE:
+        _warm_up()  # load the model now so the first "Push to ERP" is instant
+    print(f"Billflow demo on http://localhost:{port}  (FAKE_RUN={int(FAKE)})")
     app.run(host="127.0.0.1", port=port, debug=False, threaded=True)

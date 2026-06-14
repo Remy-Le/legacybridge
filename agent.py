@@ -13,6 +13,7 @@ import argparse
 import importlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -66,13 +67,40 @@ def draw_grid(img, scale, spacing, font_size):
     return img
 
 
-def grab_screenshot(out_path, grid=None):
+def get_window_rect(app_name):
+    """Logical (x, y, w, h) of the front window of the named macOS app, via System
+    Events. Used to scope the agent to one window (e.g. Tryton in a screen half)."""
+    script = (f'tell application "System Events" to tell '
+              f'(first process whose name contains "{app_name}") '
+              f'to get {{position, size}} of window 1')
+    out = subprocess.run(["osascript", "-e", script],
+                         capture_output=True, text=True, check=True).stdout
+    nums = [int(n) for n in re.findall(r"-?\d+", out)]
+    return tuple(nums[:4])  # (x, y, w, h)
+
+
+def get_region(settings):
+    """The logical rectangle the agent looks at and clicks within. Full screen by
+    default; the target app's window when `capture_window: true` (so the model
+    never sees — and never mis-clicks — anything outside that window)."""
+    w, h = pyautogui.size()
+    if settings.get("capture_window") and settings.get("target_app"):
+        return get_window_rect(settings["target_app"])
+    return (0, 0, w, h)
+
+
+def grab_screenshot(out_path, grid=None, region=None):
     """Save a screenshot and return (path, scale, width, height) where scale maps
     screenshot pixels -> logical points (Retina screens report 2x pixels vs click
-    coords). If grid is enabled, a labeled coordinate grid is drawn on first."""
+    coords). If `region` (logical x,y,w,h) is given, the shot is cropped to it so
+    the model only sees that window. If grid is enabled, it's drawn on first."""
     shot = pyautogui.screenshot()
     logical_w, _ = pyautogui.size()
     scale = shot.width / logical_w
+    if region is not None:
+        rx, ry, rw, rh = region
+        shot = shot.crop((round(rx * scale), round(ry * scale),
+                          round((rx + rw) * scale), round((ry + rh) * scale)))
     if grid and grid.get("enabled"):
         draw_grid(shot, scale, grid.get("spacing", 100), grid.get("font_size", 40))
     shot.save(out_path)
@@ -138,12 +166,12 @@ def run_once(backend, handle, settings, task):
     so we can validate coordinates before trusting any click."""
     focus_target(settings)
 
+    region = get_region(settings)
     shot_path = os.path.join(settings["screenshots"]["dir"], "once.png")
-    shot_path, scale, shot_w, shot_h = grab_screenshot(shot_path, settings.get("grid"))
-    screen = pyautogui.size()
+    shot_path, scale, shot_w, shot_h = grab_screenshot(shot_path, settings.get("grid"), region)
 
     t0 = time.time()
-    action = backend.predict(handle, task, [], shot_path, screen, settings)
+    action = backend.predict(handle, task, [], shot_path, region, settings)
     elapsed = time.time() - t0
 
     result = {
@@ -215,16 +243,21 @@ def run_workflow(backend, handle, settings, workflow_path, start_step=1, input_p
         subs = load_invoice_substitutions(input_path)
         steps = [apply_substitutions(step, subs) for step in steps]
 
+    # The rectangle we look at and click within: full screen, or just the target
+    # window when capture_window is set. Read ONCE here (the window stays put for
+    # the run) so dialogs that open over it are still inside the same crop.
+    region = get_region(settings)
+
     log_path = os.path.join(settings["screenshots"]["dir"], "trace.log")
     with open(log_path, "w") as f:  # fresh trace per run
-        f.write(f"WORKFLOW: {workflow_path}\nBACKEND: {settings['backend']}\nSTEPS: {len(steps)}\n")
+        f.write(f"WORKFLOW: {workflow_path}\nBACKEND: {settings['backend']}\n"
+                f"STEPS: {len(steps)}\nREGION: {region}\n")
 
-    screen = pyautogui.size()
     for i, step in enumerate(steps, 1):
         if i < start_step:  # resume mid-flow: Tryton must already be in step i's state
             continue
         shot_path = os.path.join(settings["screenshots"]["dir"], f"step_{i:02d}.png")
-        shot_path, scale, shot_w, shot_h = grab_screenshot(shot_path, settings.get("grid"))
+        shot_path, scale, shot_w, shot_h = grab_screenshot(shot_path, settings.get("grid"), region)
 
         kind = step["action"]
         # Write the header BEFORE locating, so a crash inside locate() still
@@ -236,18 +269,19 @@ def run_workflow(backend, handle, settings, workflow_path, start_step=1, input_p
 
         if kind in ("click", "double_click", "right_click"):
             if "at_frac" in step:
-                # Fixed position as a FRACTION of screen size, resolved against the
-                # live screen size at runtime — so it survives resolution/scaling
-                # changes (as long as the Tryton window stays maximized). Used only
-                # for the label-less Lines '+' icon the vision model can't localize.
+                # Fixed position as a FRACTION of the REGION, resolved at runtime —
+                # so it follows the window wherever it sits (e.g. Tryton in a screen
+                # half). Used only for the label-less / ambiguous chrome buttons the
+                # vision model can't localize.
                 fx, fy = step["at_frac"]
-                x, y = round(fx * screen[0]), round(fy * screen[1])
+                x = round(region[0] + fx * region[2])
+                y = round(region[1] + fy * region[3])
                 write_trace(log_path, f"[FIXED-FRAC]  {step['at_frac']} -> ({x},{y}) [logical]\n")
             else:
                 target = step["target"]
                 write_trace(log_path, f"[TARGET]  {target}\n")
                 t0 = time.time()
-                x, y, raw = backend.locate(handle, target, shot_path, screen, settings)
+                x, y, raw = backend.locate(handle, target, shot_path, region, settings)
                 elapsed = time.time() - t0
                 write_trace(log_path, f"[LOCATE]  ({elapsed:.1f}s) -> ({x},{y}) [logical]\n[RAW]  {raw}\n")
             step = {**step, "x": x, "y": y}
@@ -305,14 +339,14 @@ def main():
     with open(log_path, "w") as f:  # fresh trace per run
         f.write(f"TASK: {args.task}\nBACKEND: {settings['backend']}\n")
 
-    screen = pyautogui.size()
+    region = get_region(settings)
     history = []
     for step in range(1, settings["loop"]["max_steps"] + 1):
         shot_path = os.path.join(settings["screenshots"]["dir"], f"step_{step:02d}.png")
-        shot_path, scale, shot_w, shot_h = grab_screenshot(shot_path, settings.get("grid"))
+        shot_path, scale, shot_w, shot_h = grab_screenshot(shot_path, settings.get("grid"), region)
 
         t0 = time.time()
-        action = backend.predict(handle, args.task, history, shot_path, screen, settings)
+        action = backend.predict(handle, args.task, history, shot_path, region, settings)
         elapsed = time.time() - t0
 
         parsed = {k: v for k, v in action.items() if k != "raw"}

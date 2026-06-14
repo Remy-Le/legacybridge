@@ -14,6 +14,7 @@ Run:
     FAKE_RUN=1 python demo/server.py      # rehearse the UI without the 19GB model
 """
 
+import json
 import os
 import re
 import subprocess
@@ -106,23 +107,29 @@ def _tavily(product):
 
 
 def _pioneer(party, product, quantity, unit_price):
-    """Pioneer (Fastino) call via its OpenAI-compatible endpoint. Returns 403 until a
-    card is verified (see comment above); on any failure the caller builds locally."""
+    """Pioneer (Fastino) call via its OpenAI-compatible endpoint (api.pioneer.ai/v1,
+    X-API-Key). Pioneer extracts the four invoice fields and we build the contract
+    from ITS output. On any failure the caller builds locally."""
     key = os.environ["PIONEER_API_KEY"]
-    model = os.environ.get("PIONEER_MODEL", "fastino/gliner2-base-v1")
+    model = os.environ.get("PIONEER_MODEL", "pioneer/auto")
     r = requests.post(
         "https://api.pioneer.ai/v1/chat/completions",
         headers={"X-API-Key": key, "Content-Type": "application/json"},
         json={"model": model,
               "messages": [{"role": "user", "content": (
-                  "Extract this invoice as JSON with keys party, product, quantity, "
-                  f"unit_price. Text: Invoice {party} for {quantity}x {product} "
+                  "Return ONLY a JSON object with keys party (string), product "
+                  "(string), quantity (number), unit_price (number) for this invoice "
+                  f"request: Invoice {party} for {quantity}x {product} "
                   f"at {unit_price} each.")}]},
-        timeout=8,
+        timeout=25,  # pioneer/auto reasons before answering
     )
     r.raise_for_status()
-    # We do not trust the model to emit our exact contract; build it ourselves.
-    return _build_invoice(party, product, quantity, unit_price)
+    content = r.json()["choices"][0]["message"]["content"]
+    # Strip optional ```json fences, then parse Pioneer's structured output.
+    text = re.sub(r"^```(?:json)?|```$", "", content.strip(), flags=re.MULTILINE).strip()
+    data = json.loads(text)
+    return _build_invoice(data["party"], data["product"],
+                          data["quantity"], data["unit_price"])
 
 
 def _build_invoice(party, product, quantity, unit_price):
@@ -191,7 +198,6 @@ def push():
     global _proc, _started, _fake_done
     invoice = request.json
     with open(INVOICE_PATH, "w") as f:
-        import json
         json.dump(invoice, f, indent=2)
 
     _started = True

@@ -57,7 +57,7 @@ LegacyBridge is built with these hackathon partner technologies:
 - **Aikido** — security scanning of the codebase (SAST + dependency scanning).
   The repository scans **clean — 0 issues**:
 
-![Aikido scan of legacybridge: 0 issues](docs/aikido-clean-scan.png)
+![Aikido scan of legacybridge: 0 issues](presentation/aikido-repo-zero-issues.png)
 
 ## Demo
 

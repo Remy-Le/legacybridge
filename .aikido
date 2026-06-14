@@ -1,0 +1,16 @@
+# Aikido scan config — https://help.aikido.dev/code-scanning/scanning-practices/ignore-via-code-with-aikido-files
+# Matching is simple substring inclusion on the full file path (no globs/regex).
+#
+# This is a hackathon repo. Nothing here is internet-facing production code, so the
+# SAST/SCA findings below are intentional or irrelevant for the demo context.
+exclude:
+  paths:
+    # Generated Claude Design preview runtime — "GENERATED ... do not edit".
+    # eval/new Function are core to the live preview (RCE + document.write + SSRF findings).
+    - presentation/
+    # Static demo page (document.write finding).
+    - demo/app.html
+    # Local on-device GUI agent; dynamic backend import by design (file-inclusion finding).
+    - agent.py
+    # Local-only deps; pulls transitive `tokenizers` (its XSS CVE is irrelevant on-device).
+    - requirements.txt

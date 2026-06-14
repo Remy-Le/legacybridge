@@ -47,6 +47,18 @@ human request to a posted invoice:
 3. **Pioneer / Fastino** — structures the result into clean JSON (the invoice request).
 4. **LegacyBridge** — pushes that JSON into the legacy ERP by driving its GUI.
 
+## Partner technologies
+
+LegacyBridge is built with these hackathon partner technologies:
+
+- **Google DeepMind (Gemini)** — chat front-end where the user describes the request.
+- **Tavily** — product research / lookup.
+- **Pioneer** — structures the result into clean, validated JSON (the invoice request).
+- **Aikido** — security scanning of the codebase (SAST, dependency, and surface
+  monitoring of the live domain). The repository scans **clean — 0 issues**:
+
+![Aikido scan of legacybridge: 0 issues](docs/aikido-clean-scan.png)
+
 ## Demo
 
 There are two ways to see it run.

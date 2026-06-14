@@ -296,5 +296,4 @@ cause behind every decision.
 
 ## Don't
 
-- Don't `git add -A` (a guard blocks it; stage explicit paths).
 - Don't run a real (clicking) run while another session might be driving the mouse.

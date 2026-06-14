@@ -54,8 +54,8 @@ LegacyBridge is built with these hackathon partner technologies:
 - **Google DeepMind (Gemini)** — chat front-end where the user describes the request.
 - **Tavily** — product research / lookup.
 - **Pioneer** — structures the result into clean, validated JSON (the invoice request).
-- **Aikido** — security scanning of the codebase (SAST, dependency, and surface
-  monitoring of the live domain). The repository scans **clean — 0 issues**:
+- **Aikido** — security scanning of the codebase (SAST + dependency scanning).
+  The repository scans **clean — 0 issues**:
 
 ![Aikido scan of legacybridge: 0 issues](docs/aikido-clean-scan.png)
 

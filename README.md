@@ -1,6 +1,6 @@
 
 # LegacyBridge
-Note: this project was built during Tech Europe's Munich AI Hackathon June 2026.
+Note: this project was built during Tech Europe's [Munich AI Hackathon](https://luma.com/munich-hackathon) June 2026.
 
 This project made it into the top 5 out of about 20 teams.
 

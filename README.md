@@ -1,10 +1,14 @@
+*Note: this project was built during Tech Europe's Munich AI Hackathon June 2026.
+This project made it into the top 5 out of about 20 teams.
+
 # LegacyBridge
+
+**The integration layer for apps that have no API.**
 
 Demo video (2min) : https://youtu.be/XbaZerwnU0o
 
 [![Watch the video](https://img.youtube.com/vi/XbaZerwnU0o/0.jpg)](https://www.youtube.com/watch?v=XbaZerwnU0o)
 
-**The integration layer for apps that have no API.**
 
 A huge amount of business-critical software has no usable API: old ERPs
 (Tryton, SAP, in-house systems from the 2000s), desktop accounting tools, niche

@@ -2,6 +2,7 @@
 
 Demo video (2min) : https://youtu.be/XbaZerwnU0o
 
+[![Watch the video](https://img.youtube.com/vi/XbaZerwnU0o/0.jpg)](https://www.youtube.com/watch?v=XbaZerwnU0o)
 
 **The integration layer for apps that have no API.**
 

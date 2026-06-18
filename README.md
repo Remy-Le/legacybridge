@@ -1,5 +1,8 @@
 # LegacyBridge
 
+Demo video (2min) : https://youtu.be/XbaZerwnU0o
+
+
 **The integration layer for apps that have no API.**
 
 A huge amount of business-critical software has no usable API: old ERPs
